@@ -5,6 +5,34 @@ struct PlayerView: View {
     @EnvironmentObject var audioManager: OptimizedAudioPlayerManager
     @Environment(\.colorScheme) var systemColorScheme
     @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss // Pour les versions iOS 15+
+    
+    @GestureState private var dragState = DragState.inactive
+    @State private var viewOffset: CGFloat = 0
+    
+    // Drag state enum pour suivre l'état du swipe
+    enum DragState {
+        case inactive
+        case dragging(translation: CGSize)
+        
+        var translation: CGSize {
+            switch self {
+            case .inactive:
+                return .zero
+            case .dragging(let translation):
+                return translation
+            }
+        }
+        
+        var isDragging: Bool {
+            switch self {
+            case .inactive:
+                return false
+            case .dragging:
+                return true
+            }
+        }
+    }
     
     @GestureState private var dragOffset: CGFloat = 0
     @State private var seekPosition: Double = 0
@@ -60,8 +88,9 @@ struct PlayerView: View {
                     VStack(spacing: 15) {
                         HStack {
                             Spacer()
+                            // Indicateur visuel pour le swipe down
                             Rectangle()
-                                .fill(Color.gray.opacity(0.0))
+                                .fill(Color.gray.opacity(0.5))
                                 .frame(width: 40, height: 5)
                                 .cornerRadius(2.5)
                             Spacer()
@@ -74,10 +103,31 @@ struct PlayerView: View {
                     .padding(.horizontal, 15)
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
-                .ignoresSafeArea(.all, edges: .all) // Ajout ici pour le ScrollView
+                .offset(y: max(0, self.viewOffset))
+                .animation(.interactiveSpring(), value: viewOffset)
+                .gesture(
+                    DragGesture()
+                        .updating($dragState) { value, state, _ in
+                            state = .dragging(translation: value.translation)
+                        }
+                        .onChanged { value in
+                            // Ne permet que le glissement vers le bas
+                            if value.translation.height > 0 {
+                                self.viewOffset = value.translation.height
+                            }
+                        }
+                        .onEnded { value in
+                            // Ferme la vue si le glissement est suffisant
+                            if value.translation.height > geometry.size.height * 0.2 {
+                                self.dismiss()
+                            } else {
+                                self.viewOffset = 0
+                            }
+                        }
+                )
             }
         }
-        .ignoresSafeArea(.all, edges: .all) // Déjà présent pour le GeometryReader
+        .ignoresSafeArea(.all, edges: .bottom)
         .onAppear {
             seekPosition = currentTime
             updateSmoothTransitionState()
@@ -327,17 +377,17 @@ struct PlayerView: View {
                 Image(uiImage: artwork)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: min(UIScreen.main.bounds.width * 0.6, 250), height: min(UIScreen.main.bounds.width * 0.6, 250))
-                    .cornerRadius(8)
-                    .shadow(radius: 8)
+                    .frame(width: min(UIScreen.main.bounds.width * 0.85, 350), height: min(UIScreen.main.bounds.width * 0.85, 350))
+                    .cornerRadius(12)
+                    .shadow(radius: 10)
             } else {
                 Rectangle()
                     .fill(Color.gray.opacity(0.3))
-                    .frame(width: min(UIScreen.main.bounds.width * 0.6, 250), height: min(UIScreen.main.bounds.width * 0.6, 250))
+                    .frame(width: min(UIScreen.main.bounds.width * 0.85, 350), height: min(UIScreen.main.bounds.width * 0.85, 350))
                     .cornerRadius(20)
                     .overlay(
                         Image(systemName: "music.note")
-                            .font(.system(size: 70))
+                            .font(.system(size: 90))
                             .foregroundColor(.gray)
                     )
             }
